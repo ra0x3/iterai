@@ -1,0 +1,7 @@
+.aiassistant
+.idea/
+.env
+*.pyc
+__pyenv__
+venv
+dist/
