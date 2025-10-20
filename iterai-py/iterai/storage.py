@@ -1,14 +1,17 @@
 import json
+import logging
 from pathlib import Path
 from uuid import UUID
 
 from .config import get_config
 
+logger = logging.getLogger(__name__)
+
 
 class Storage:
     def __init__(self, storage_path: str | None = None):
         if storage_path is None:
-            storage_path = get_config().get("storage.path", "~/.config/progeny")
+            storage_path = get_config().get("storage.path", "~/.config/iterai")
         self.path = Path(storage_path).expanduser()
         self.path.mkdir(parents=True, exist_ok=True)
         (self.path / "nodes").mkdir(exist_ok=True)

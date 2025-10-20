@@ -80,10 +80,10 @@ E.g. “Combine the best ideas from version A and B.”
 ## 📂 File-Based Persistence
 
 IterAI intentionally avoids RDS or external databases.
-Everything is stored in the local filesystem under `~/.config/progeny`.
+Everything is stored in the local filesystem under `~/.config/iterai`.
 
 ```
-~/.config/progeny/
+~/.config/iterai/
   ├── graph.json              # DAG metadata (nodes + edges)
   ├── nodes/
   │   ├── {uuid}/
@@ -101,7 +101,7 @@ Everything is stored in the local filesystem under `~/.config/progeny`.
 | `diff.colorize` | Enable ANSI color diffs | `true` |
 | `models.default` | Default LLM | `"gpt-4o"` |
 | `concurrency.max_tasks` | Max async tasks | `8` |
-| `storage.path` | Custom config directory | `"~/.config/progeny"` |
+| `storage.path` | Custom config directory | `"~/.config/iterai"` |
 | `system_prompt_template` | Default role prompt | `"You are an expert editor..."` |
 
 ---
@@ -287,7 +287,7 @@ Evaluation metrics can combine:
 
 | Principle | Description |
 |------------|--------------|
-| **Local-first** | Everything runs locally under `~/.config/progeny`; no database dependencies |
+| **Local-first** | Everything runs locally under `~/.config/iterai`; no database dependencies |
 | **Transparent** | Every prompt, plan, diff, and evaluation is inspectable |
 | **Composable** | Any model, any provider (via LiteLLM) |
 | **Async-native** | Fully concurrent generation, evaluation, and diffing |
@@ -302,13 +302,13 @@ The CLI will provide a Git-like interface:
 
 | Command | Description |
 |----------|--------------|
-| `progeny new` | Create a root node |
-| `progeny refine` | Create a new refinement |
-| `progeny synthesize` | Merge multiple nodes |
-| `progeny eval` | Evaluate nodes |
-| `progeny diff` | Compare outputs or plans |
-| `progeny log` | Show reasoning lineage |
-| `progeny visualize` | Render DAG graphically |
+| `iterai new` | Create a root node |
+| `iterai refine` | Create a new refinement |
+| `iterai synthesize` | Merge multiple nodes |
+| `iterai eval` | Evaluate nodes |
+| `iterai diff` | Compare outputs or plans |
+| `iterai log` | Show reasoning lineage |
+| `iterai visualize` | Render DAG graphically |
 
 ---
 
@@ -328,7 +328,7 @@ The CLI will provide a Git-like interface:
 
 | Component | Description |
 |------------|--------------|
-| **Storage** | Local file-based DAG in `~/.config/progeny` |
+| **Storage** | Local file-based DAG in `~/.config/iterai` |
 | **Execution** | Async with LiteLLM |
 | **Diffing** | Git-style text diffs + optional color |
 | **Node Types** | `Standard` (1→1) and `Synthetic` (N→1) |

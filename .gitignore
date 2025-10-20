@@ -1,4 +1,5 @@
 .aiassistant
+node_modules/
 .idea/
 .env
 *.pyc

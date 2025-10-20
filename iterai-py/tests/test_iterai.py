@@ -2,6 +2,7 @@ import asyncio
 import pytest
 
 from iterai import __version__, IterAI
+from iterai import Step
 from iterai.config import Config, DEFAULT_CONFIG
 from iterai.diff import generic_diff, compare_plan
 from iterai.node import Node
@@ -42,7 +43,7 @@ def test_node_save_and_load(tmp_path):
         improvement_type=ImprovementType.STANDARD,
     )
     node.output = "out"
-    node.plan = "plan"
+    node.plan = [Step(order=1, text="First step"), Step(order=2, text="Second step")]
     node.diff = "diff"
     node.score = 0.75
     node.metadata = {"k": "v"}
@@ -52,7 +53,8 @@ def test_node_save_and_load(tmp_path):
 
     assert loaded.id == node.id
     assert loaded.output == "out"
-    assert loaded.plan == "plan"
+    assert isinstance(loaded.plan, list) and len(loaded.plan) == 2
+    assert all(isinstance(s, Step) for s in loaded.plan)
     assert loaded.type == node.type
     assert loaded.metadata == {"k": "v"}
 
@@ -76,9 +78,49 @@ async def test_dag_plan_and_output_generation(tmp_path):
     dag.add_node(node)
     await dag._generate_node(node)
 
-    assert isinstance(node.plan, str) and len(node.plan) > 0
+    assert isinstance(node.plan, list) and len(node.plan) > 0
+    assert all(isinstance(s, Step) for s in node.plan)
     assert isinstance(node.output, str) and len(node.output) > 0
     assert node.plan != node.output
+
+
+def test_node_steps_parse_from_plan():
+    node = Node(user_prompt="u")
+    node.plan = [
+        Step(order=1, text="Gather requirements"),
+        Step(order=2, text="Draft outline"),
+        Step(order=3, text="Write first pass"),
+    ]
+
+    steps = node.steps()
+    assert isinstance(steps, list) and len(steps) == 3
+    assert all(isinstance(s, Step) for s in steps)
+    assert [s.order for s in steps] == [1, 2, 3]
+    assert steps[0].text == "Gather requirements"
+
+
+@pytest.mark.asyncio
+async def test_dag_steps_generation_and_persistence(tmp_path):
+    dag = DAG(str(tmp_path))
+
+    node = Node(
+        user_prompt="Write three concrete steps to brew coffee.", model="gpt-4o-mini"
+    )
+    dag.add_node(node)
+    await dag._generate_node(node)
+
+    steps = node.steps()
+    assert isinstance(steps, list) and len(steps) > 0
+    assert all(isinstance(s, Step) for s in steps)
+    assert [s.order for s in steps] == list(range(1, len(steps) + 1))
+    assert all(isinstance(s.text, str) and len(s.text.strip()) > 0 for s in steps)
+
+    # Persist and reload; verify steps are present
+    node.save(tmp_path)
+    loaded = Node.load(node.id, tmp_path)
+    loaded_steps = loaded.steps()
+    assert isinstance(loaded_steps, list) and len(loaded_steps) > 0
+    assert all(isinstance(s, Step) for s in loaded_steps)
 
 
 @pytest.mark.asyncio
@@ -166,7 +208,8 @@ async def test_iterai_end_to_end_standard_and_synthetic(tmp_path):
         "Write a reassuring sentence about reliability.", model="gpt-4o-mini"
     )
 
-    assert isinstance(r1.plan, str) and len(r1.plan) > 0
+    assert isinstance(r1.plan, list) and len(r1.plan) > 0
+    assert all(isinstance(s, Step) for s in r1.plan)
     assert isinstance(r1.output, str) and len(r1.output) > 0
 
     # Refine r1 (standard)

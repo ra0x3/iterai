@@ -1,4 +1,7 @@
 import difflib
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def generic_diff(a: str, b: str) -> str:
@@ -24,7 +27,7 @@ def git_diff(a: str, b: str, color=True):
             else:
                 lines.append(line)
         diff = "\n".join(lines)
-    print(diff)
+    logger.info(diff)
 
 
 def compare_plan(plan_a: str, plan_b: str) -> str:

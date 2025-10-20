@@ -2,12 +2,16 @@ import asyncio
 from pathlib import Path
 from uuid import UUID
 
+import logging
 from .config import get_config
 from .diff import generic_diff
-from .llm import generate_output, generate_plan
+from .llm import generate_output, generate_plan, generate_steps
 from .node import Node
 from .storage import Storage
 from .types import ImprovementType
+
+
+logger = logging.getLogger(__name__)
 
 
 class DAG:
@@ -77,7 +81,9 @@ class DAG:
         model = node.model or config.get("models.default", "gpt-4o")
         system_prompt = node.system_prompt or config.get("system_prompt_template", "")
 
-        node.plan = await generate_plan(model, node.user_prompt, system_prompt)
+        plan_text = await generate_plan(model, node.user_prompt, system_prompt)
+        steps = await generate_steps(model, plan_text, system_prompt)
+        node.plan = steps
 
         full_prompt = node.user_prompt
         if node.parent_ids:

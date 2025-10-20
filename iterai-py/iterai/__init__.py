@@ -1,4 +1,8 @@
+import logging
+from logging import Logger
+
 from .node import Node, ImprovementType
+from .types import Step
 from .dag import DAG
 from .diff import generic_diff, git_diff, compare_plan
 from .storage import Storage
@@ -8,12 +12,15 @@ __version__ = "0.1.0"
 __all__ = [
     "Node",
     "ImprovementType",
+    "Step",
     "DAG",
     "IterAI",
     "generic_diff",
     "git_diff",
     "compare_plan",
     "Storage",
+    "logger",
+    "set_log_level",
 ]
 
 import asyncio
@@ -124,3 +131,30 @@ class IterAI:
                 await self.evaluate_node(node, eval_model)
 
         await asyncio.gather(*[eval_with_limit(node) for node in nodes])
+
+
+# Configure package-wide logging once when the package is imported
+_handler = logging.StreamHandler()
+_handler.setFormatter(
+    logging.Formatter(
+        fmt="%(asctime)s [%(levelname)s] %(module)s:%(funcName)s:%(lineno)d - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+)
+
+logger: Logger = logging.getLogger("iterai")
+if not logger.handlers:
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+
+def set_log_level(level: str | int):
+    """Set the package logger level.
+
+    Args:
+        level: Either a string like 'DEBUG', 'INFO', etc., or an int like logging.DEBUG
+    """
+    if isinstance(level, str):
+        level = getattr(logging, level.upper(), logging.INFO)
+    logger.setLevel(level)

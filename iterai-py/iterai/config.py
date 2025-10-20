@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 import toml
 
@@ -6,6 +7,7 @@ import toml
 DEFAULT_CONFIG = {
     "diff": {
         "colorize": True,
+        "plan_comparison": "simple",  # "simple" or "llm"
     },
     "models": {
         "default": "gpt-4o",
@@ -14,16 +16,19 @@ DEFAULT_CONFIG = {
         "max_tasks": 8,
     },
     "storage": {
-        "path": "~/.config/progeny",
+        "path": "~/.config/iterai",
     },
     "system_prompt_template": "You are an expert editor...",
 }
 
+logger = logging.getLogger(__name__)
+
 
 class Config:
     def __init__(self, config_path: str | None = None):
+
         self.config_path = config_path or os.path.expanduser(
-            "~/.config/progeny/config.toml"
+            "~/.config/iterai/config.toml"
         )
         self.data = self._load()
 
