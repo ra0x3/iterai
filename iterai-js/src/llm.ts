@@ -1,3 +1,4 @@
+import { getConfig, ModelProvider, ModelRegistryEntry } from "./config.js";
 import { Step } from "./types.js";
 
 const logger = {
@@ -5,46 +6,345 @@ const logger = {
   info: (msg: string) => console.info(`[INFO] llm: ${msg}`),
 };
 
-/**
- * Generate output from an LLM using OpenAI-compatible API
- */
-export async function generateOutput(
-  model: string,
+interface LLMRequestOptions {
+  model: string;
+  userPrompt: string;
+  systemPrompt?: string;
+  provider?: ModelProvider;
+  apiKey?: string;
+  baseUrl?: string;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maxTokens?: number;
+  maxOutputTokens?: number;
+}
+
+interface ResolvedRequest {
+  model: string;
+  provider: ModelProvider;
+  apiKey?: string;
+  baseUrl: string;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maxTokens?: number;
+  maxOutputTokens?: number;
+}
+
+function normalizeBase(url: string): string {
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+
+function defaultBaseUrl(provider: ModelProvider): string {
+  const config = getConfig();
+  switch (provider) {
+    case "anthropic":
+      return (
+        config.get("api.anthropic_base_url") || "https://api.anthropic.com/v1"
+      );
+    case "google":
+      return (
+        config.get("api.google_base_url") ||
+        "https://generativelanguage.googleapis.com/v1beta/models"
+      );
+    case "openai":
+      return config.get("api.base_url") || "https://api.openai.com/v1";
+    default:
+      return "";
+  }
+}
+
+function lookupApiKey(provider: ModelProvider, entry?: ModelRegistryEntry): string | undefined {
+  if (entry?.apiKey) return entry.apiKey;
+  const config = getConfig();
+  switch (provider) {
+    case "openai":
+      return config.get("api.openai_key");
+    case "anthropic":
+      return config.get("api.anthropic_key");
+    case "google":
+      return config.get("api.google_key");
+    default:
+      return undefined;
+  }
+}
+
+function resolveRequest(options: LLMRequestOptions): ResolvedRequest {
+  const config = getConfig();
+  const registry = config.get("models.registry", {}) as Record<string, ModelRegistryEntry>;
+  const entry = registry?.[options.model];
+  const provider: ModelProvider =
+    options.provider || entry?.provider || "openai";
+
+  const entryOptions = (entry?.options ?? {}) as Record<string, any>;
+
+  const baseUrl =
+    options.baseUrl || entry?.baseUrl || defaultBaseUrl(provider);
+
+  const apiKey = options.apiKey || entry?.apiKey || lookupApiKey(provider, entry);
+
+  const temperature = options.temperature ?? entryOptions.temperature;
+  const topP = options.topP ?? entryOptions.topP;
+  const topK = options.topK ?? entryOptions.topK;
+  const maxTokens = options.maxTokens ?? entryOptions.maxTokens;
+  const maxOutputTokens =
+    options.maxOutputTokens ?? entryOptions.maxOutputTokens ?? entryOptions.maxTokens;
+
+  return {
+    model: options.model,
+    provider,
+    baseUrl,
+    apiKey,
+    temperature,
+    topP,
+    topK,
+    maxTokens,
+    maxOutputTokens,
+  };
+}
+
+async function callOpenAI(
+  request: ResolvedRequest,
   userPrompt: string,
-  systemPrompt: string = "",
-  apiKey?: string,
-  baseUrl: string = "https://api.openai.com/v1",
+  systemPrompt?: string,
 ): Promise<string> {
+  if (!request.apiKey) {
+    throw new Error("OpenAI API key is required");
+  }
+
   const messages: Array<{ role: string; content: string }> = [];
   if (systemPrompt) {
     messages.push({ role: "system", content: systemPrompt });
   }
   messages.push({ role: "user", content: userPrompt });
 
-  logger.debug(
-    `Calling LLM model=${model} with ${userPrompt.length} char prompt`,
+  const body: Record<string, any> = {
+    model: request.model,
+    messages,
+  };
+  if (typeof request.temperature === "number") {
+    body.temperature = request.temperature;
+  }
+  if (typeof request.topP === "number") {
+    body.top_p = request.topP;
+  }
+  const maxTokens =
+    typeof request.maxTokens === "number"
+      ? Math.floor(request.maxTokens)
+      : typeof request.maxOutputTokens === "number"
+      ? Math.floor(request.maxOutputTokens)
+      : undefined;
+  if (typeof maxTokens === "number" && maxTokens > 0) {
+    body.max_tokens = maxTokens;
+  }
+
+  const response = await fetch(
+    `${normalizeBase(request.baseUrl)}/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${request.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    },
   );
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey || ""}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-    }),
-  });
-
   if (!response.ok) {
-    throw new Error(`LLM API error: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `OpenAI API error: ${response.status} ${response.statusText}`,
+    );
   }
 
   const data = await response.json();
-  const content = data.choices[0].message.content;
-  logger.debug(`LLM response received: ${content.length} chars`);
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error("OpenAI API returned no content");
+  }
   return content;
+}
+
+async function callAnthropic(
+  request: ResolvedRequest,
+  userPrompt: string,
+  systemPrompt?: string,
+): Promise<string> {
+  if (!request.apiKey) {
+    throw new Error("Anthropic API key is required");
+  }
+
+  const maxOutputTokens =
+    typeof request.maxOutputTokens === "number"
+      ? Math.max(1, Math.floor(request.maxOutputTokens))
+      : undefined;
+
+  const payload: Record<string, unknown> = {
+    model: request.model,
+    messages: [
+      {
+        role: "user",
+        content: userPrompt,
+      },
+    ],
+    max_output_tokens: maxOutputTokens ?? 1024,
+  };
+
+  if (systemPrompt) {
+    payload.system = systemPrompt;
+  }
+  if (typeof request.temperature === "number") {
+    payload.temperature = request.temperature;
+  }
+  if (typeof request.topP === "number") {
+    payload.top_p = request.topP;
+  }
+  if (typeof request.topK === "number") {
+    payload.top_k = request.topK;
+  }
+
+  const response = await fetch(
+    `${normalizeBase(request.baseUrl)}/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": request.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Anthropic API error: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  const data = await response.json();
+  const content = data?.content?.[0]?.text;
+  if (!content) {
+    throw new Error("Anthropic API returned no content");
+  }
+  return content;
+}
+
+async function callGoogle(
+  request: ResolvedRequest,
+  userPrompt: string,
+  systemPrompt?: string,
+): Promise<string> {
+  if (!request.apiKey) {
+    throw new Error("Google Generative Language API key is required");
+  }
+
+  const payload: Record<string, unknown> = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: userPrompt }],
+      },
+    ],
+  };
+
+  if (systemPrompt) {
+    payload.systemInstruction = {
+      role: "system",
+      parts: [{ text: systemPrompt }],
+    };
+  }
+
+  const generationConfig: Record<string, number> = {};
+  if (typeof request.temperature === "number") {
+    generationConfig.temperature = request.temperature;
+  }
+  if (typeof request.topP === "number") {
+    generationConfig.topP = request.topP;
+  }
+  if (typeof request.topK === "number") {
+    generationConfig.topK = request.topK;
+  }
+  if (typeof request.maxOutputTokens === "number") {
+    generationConfig.maxOutputTokens = Math.max(1, Math.floor(request.maxOutputTokens));
+  }
+  if (Object.keys(generationConfig).length > 0) {
+    payload.generationConfig = generationConfig;
+  }
+
+  const url = `${normalizeBase(request.baseUrl)}/${encodeURIComponent(
+    request.model,
+  )}:generateContent?key=${request.apiKey}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Google Generative Language API error: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  const data = await response.json();
+  const candidate = data?.candidates?.[0];
+  const parts = Array.isArray(candidate?.content?.parts)
+    ? candidate.content.parts
+    : [];
+  const text = parts
+    .map((part: { text?: string }) => part?.text || "")
+    .filter(Boolean)
+    .join("\n");
+
+  if (!text) {
+    throw new Error("Google Generative Language API returned no content");
+  }
+
+  return text;
+}
+
+async function requestLLM(options: LLMRequestOptions): Promise<string> {
+  const resolved = resolveRequest(options);
+  const { provider, model } = resolved;
+  logger.debug(
+    `Calling LLM provider=${provider} model=${model} promptLength=${options.userPrompt.length}`,
+  );
+
+  switch (provider) {
+    case "openai":
+      return callOpenAI(resolved, options.userPrompt, options.systemPrompt);
+    case "anthropic":
+      return callAnthropic(resolved, options.userPrompt, options.systemPrompt);
+    case "google":
+      return callGoogle(resolved, options.userPrompt, options.systemPrompt);
+    default:
+      throw new Error(`Unsupported LLM provider: ${provider}`);
+  }
+}
+
+/**
+ * Generate output from a configured LLM provider
+ */
+export async function generateOutput(
+  model: string,
+  userPrompt: string,
+  systemPrompt: string = "",
+  apiKey?: string,
+  baseUrl?: string,
+  provider?: ModelProvider,
+): Promise<string> {
+  return requestLLM({
+    model,
+    userPrompt,
+    systemPrompt,
+    apiKey,
+    baseUrl,
+    provider,
+  });
 }
 
 /**
@@ -56,6 +356,7 @@ export async function generatePlan(
   systemPrompt: string = "",
   apiKey?: string,
   baseUrl?: string,
+  provider?: ModelProvider,
 ): Promise<string> {
   logger.debug(`Generating plan for task: ${userPrompt.slice(0, 50)}...`);
   const planPrompt = `Before answering, create a concise structured plan for how you'll approach this task.
@@ -68,13 +369,14 @@ Requirements:
 - Avoid verbose explanations or justifications
 - Provide only the plan, not the actual output`;
 
-  const plan = await generateOutput(
+  const plan = await requestLLM({
     model,
-    planPrompt,
+    userPrompt: planPrompt,
     systemPrompt,
     apiKey,
     baseUrl,
-  );
+    provider,
+  });
   logger.debug(`Plan generated: ${plan.length} chars`);
   return plan;
 }
@@ -88,6 +390,7 @@ export async function generateSteps(
   systemPrompt: string = "",
   apiKey?: string,
   baseUrl?: string,
+  provider?: ModelProvider,
 ): Promise<Step[]> {
   logger.debug(`Generating steps from plan (${planText.length} chars)`);
   const stepsPrompt = `You are converting a free-form plan into structured steps.
@@ -97,13 +400,14 @@ Return STRICT JSON only, no code fences, no commentary, exactly this schema:
 Input plan:
 ${planText}`;
 
-  const raw = await generateOutput(
+  const raw = await requestLLM({
     model,
-    stepsPrompt,
+    userPrompt: stepsPrompt,
     systemPrompt,
     apiKey,
     baseUrl,
-  );
+    provider,
+  });
 
   // Strip code fences if present
   const stripCodeFences = (s: string): string => {
@@ -188,6 +492,7 @@ export async function comparePlansLLM(
   model: string = "gpt-4o-mini",
   apiKey?: string,
   baseUrl?: string,
+  provider?: ModelProvider,
 ): Promise<string> {
   logger.debug(
     `Comparing plans: ${planA.length} steps vs ${planB.length} steps using ${model}`,
@@ -201,17 +506,13 @@ Plan A:
 ${planAText}
 
 Plan B:
-${planBText}
+${planBText}`;
 
-Provide a concise analysis of what changed and why it might matter.`;
-
-  const result = await generateOutput(
+  return requestLLM({
     model,
-    comparisonPrompt,
-    "",
+    userPrompt: comparisonPrompt,
     apiKey,
     baseUrl,
-  );
-  logger.debug("Plan comparison complete");
-  return result;
+    provider,
+  });
 }

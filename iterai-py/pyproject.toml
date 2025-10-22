@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "iterai"
-version = "0.1.0"
+version = "0.2.0"
 description = "A local-first, graph-based LLM refinement engine with transparent planning, diff-based evolution, and multi-model synthesis."
 authors = ["ra0x3 <spam.rashad@protonmail.com>"]
 license = "MIT"

@@ -1,6 +1,6 @@
 import { DAG } from "./dag.js";
 import { Node } from "./node.js";
-import { getConfig, Config } from "./config.js";
+import { getConfig, Config, ModelProvider, ModelRegistryEntry } from "./config.js";
 import { generateOutput } from "./llm.js";
 import { ImprovementType } from "./types.js";
 
@@ -12,6 +12,34 @@ export class IterAI {
   public config: Config;
   private apiKey?: string;
   private baseUrl?: string;
+  private resolveOverrides(model?: string): {
+    apiKey?: string;
+    baseUrl?: string;
+    provider: ModelProvider;
+  } {
+    const registry = this.config.get("models.registry", {} as Record<string, ModelRegistryEntry>);
+    const entry = model ? registry?.[model] : undefined;
+    const provider =
+      (entry?.provider as ModelProvider | undefined) ||
+      ("openai" as ModelProvider);
+
+    const baseUrl = entry?.baseUrl;
+    const apiKey = entry?.apiKey ?? (provider === "openai" ? this.apiKey : undefined);
+
+    if (provider === "openai") {
+      return {
+        apiKey,
+        baseUrl: baseUrl ?? this.baseUrl,
+        provider,
+      };
+    }
+
+    return {
+      provider,
+      apiKey,
+      baseUrl,
+    };
+  }
 
   constructor(storagePath?: string, apiKey?: string, baseUrl?: string) {
     this.dag = new DAG(storagePath);
@@ -38,8 +66,11 @@ export class IterAI {
       ImprovementType.STANDARD,
     );
 
+    const overrides = this.resolveOverrides(model);
+    node.metadata.provider = overrides.provider;
+
     this.dag.addNode(node);
-    await this.dag.generateNode(node, this.apiKey, this.baseUrl);
+    await this.dag.generateNode(node, overrides.apiKey, overrides.baseUrl);
     this.dag.storage.saveNode(node.id, node.toDict());
     this.dag["saveGraph"]();
 
@@ -64,8 +95,11 @@ export class IterAI {
       ImprovementType.STANDARD,
     );
 
+    const overrides = this.resolveOverrides(model);
+    node.metadata.provider = overrides.provider;
+
     this.dag.addEdge(node, parent);
-    await this.dag.generateNode(node, this.apiKey, this.baseUrl);
+    await this.dag.generateNode(node, overrides.apiKey, overrides.baseUrl);
     this.dag["computeDiffs"]();
     this.dag.storage.saveNode(node.id, node.toDict());
     this.dag["saveGraph"]();
@@ -91,8 +125,11 @@ export class IterAI {
       ImprovementType.SYNTHETIC,
     );
 
+    const overrides = this.resolveOverrides(model);
+    node.metadata.provider = overrides.provider;
+
     this.dag.addEdge(node, parents);
-    await this.dag.generateNode(node, this.apiKey, this.baseUrl);
+    await this.dag.generateNode(node, overrides.apiKey, overrides.baseUrl);
     this.dag["computeDiffs"]();
     this.dag.storage.saveNode(node.id, node.toDict());
     this.dag["saveGraph"]();
@@ -104,12 +141,14 @@ export class IterAI {
     evalModel = evalModel || "gpt-4o-mini";
     const evalPrompt = `Rate the following text on a scale from 0 to 1, where 1 is excellent. Respond with only the number.\n\n${node.output}`;
 
+    const overrides = this.resolveOverrides(evalModel);
     const scoreText = await generateOutput(
       evalModel,
       evalPrompt,
       "",
-      this.apiKey,
-      this.baseUrl,
+      overrides.apiKey,
+      overrides.baseUrl,
+      overrides.provider,
     );
     try {
       node.score = parseFloat(scoreText.trim());

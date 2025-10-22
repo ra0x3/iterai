@@ -1,6 +1,6 @@
 import { Node } from "./node.js";
 import { Storage } from "./storage.js";
-import { getConfig } from "./config.js";
+import { getConfig, ModelProvider } from "./config.js";
 import { generateOutput, generatePlan, generateSteps } from "./llm.js";
 import { genericDiff } from "./diff.js";
 import { ImprovementType } from "./types.js";
@@ -101,12 +101,19 @@ export class DAG {
     const systemPrompt =
       node.system_prompt || config.get("system_prompt_template", "");
 
+    const registry = config.get("models.registry", {} as Record<string, any>);
+    if (registry?.[model]?.provider && !node.metadata.provider) {
+      node.metadata.provider = registry[model].provider;
+    }
+    const provider = node.metadata.provider as ModelProvider | undefined;
+
     const planText = await generatePlan(
       model,
       node.user_prompt,
       systemPrompt,
       apiKey,
       baseUrl,
+      provider,
     );
     const steps = await generateSteps(
       model,
@@ -114,6 +121,7 @@ export class DAG {
       systemPrompt,
       apiKey,
       baseUrl,
+      provider,
     );
     node.plan = steps;
 
@@ -134,6 +142,7 @@ export class DAG {
       systemPrompt,
       apiKey,
       baseUrl,
+      provider,
     );
     node.model = model;
   }
