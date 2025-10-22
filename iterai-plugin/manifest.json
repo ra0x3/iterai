@@ -1,12 +1,24 @@
 {
   "manifest_version": 3,
-  "name": "Itera Workflow Assistant",
+  "name": "IterAI Workflow Assistant",
   "description": "Configure IterAI model pipelines and drive refinements from Chrome.",
   "version": "0.1.0",
   "options_page": "options.html",
+  "icons": {
+    "16": "imgs/favicon/favicon-16x16.png",
+    "32": "imgs/favicon/favicon-32x32.png",
+    "48": "imgs/favicon/android-chrome-192x192.png",
+    "128": "imgs/favicon/android-chrome-512x512.png"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Itera"
+    "default_title": "IterAI",
+    "default_icon": {
+      "16": "imgs/favicon/favicon-16x16.png",
+      "32": "imgs/favicon/favicon-32x32.png",
+      "48": "imgs/favicon/android-chrome-192x192.png",
+      "128": "imgs/favicon/android-chrome-512x512.png"
+    }
   },
   "permissions": [
     "activeTab",

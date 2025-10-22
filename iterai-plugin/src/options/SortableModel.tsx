@@ -72,7 +72,7 @@ export function SortableModel({
             type="password"
             autoComplete="off"
             value={secretValue}
-            placeholder={`Paste ${model.provider} token`}
+            placeholder={`Paste ${model.provider.charAt(0).toUpperCase() + model.provider.slice(1)} token`}
             onChange={(event) => onSecretChange(event.target.value)}
           />
         </div>

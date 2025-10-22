@@ -1,9 +1,21 @@
+import { copyFileSync, mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { resolve } from "node:path";
+
+function copyManifestPlugin() {
+  return {
+    name: "copy-manifest",
+    closeBundle() {
+      const outputDir = resolve(__dirname, "dist");
+      mkdirSync(outputDir, { recursive: true });
+      copyFileSync(resolve(__dirname, "manifest.json"), resolve(outputDir, "manifest.json"));
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), copyManifestPlugin()],
   resolve: {
     alias: {
       "@itera": resolve(__dirname, "../iterai-js/src"),

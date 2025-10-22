@@ -4,6 +4,10 @@ from copy import deepcopy
 from pathlib import Path
 import toml
 
+MODEL_ALIASES = {
+    "gemini-1.5-pro": "gemini-1.5-pro-latest",
+}
+
 DEFAULT_MODEL_REGISTRY = {
     "gpt-4o": {
         "provider": "openai",
@@ -30,7 +34,7 @@ DEFAULT_MODEL_REGISTRY = {
             "maxOutputTokens": 2048,
         },
     },
-    "gemini-1.5-pro": {
+    "gemini-1.5-pro-latest": {
         "provider": "google",
         "baseUrl": "https://generativelanguage.googleapis.com/v1beta/models",
         "options": {
@@ -84,7 +88,18 @@ class Config:
         if path.exists():
             user_data = toml.load(path)
             data = _deep_merge(data, user_data)
+        self._apply_model_aliases(data)
         return data
+
+    def _apply_model_aliases(self, data: dict) -> None:
+        models = data.get("models", {})
+        registry = models.get("registry", {})
+        for legacy, modern in MODEL_ALIASES.items():
+            if legacy in registry and modern not in registry:
+                registry[modern] = registry.pop(legacy)
+        default_model = models.get("default")
+        if default_model in MODEL_ALIASES:
+            models["default"] = MODEL_ALIASES[default_model]
 
     def get(self, key: str, default=None):
         keys = key.split(".")

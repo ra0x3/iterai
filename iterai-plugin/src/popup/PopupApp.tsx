@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadSettings } from "../shared/storage";
+import { InfoTooltip } from "../shared/InfoTooltip";
 import "../options/styles.css";
 
 interface BackgroundResponse<T> {
@@ -78,6 +79,7 @@ export function PopupApp(): JSX.Element {
   const [isRunning, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<RunPipelineResult["nodes"]>([]);
+  const [expandedNodes, setExpandedNodes] = useState<string[]>([]);
 
   useEffect(() => {
     async function hydrate() {
@@ -110,6 +112,7 @@ export function PopupApp(): JSX.Element {
     setRunning(true);
     setError(null);
     setResults([]);
+    setExpandedNodes([]);
     try {
       const data = await sendBackgroundMessage<RunPipelineResult>({
         type: "itera:run-pipeline",
@@ -124,6 +127,12 @@ export function PopupApp(): JSX.Element {
     }
   };
 
+  const toggleExpanded = (id: string) => {
+    setExpandedNodes((prev) =>
+      prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id],
+    );
+  };
+
   const handleOpenOptions = () => {
     if (hasChromeApi() && chrome.runtime?.openOptionsPage) {
       chrome.runtime.openOptionsPage();
@@ -134,21 +143,31 @@ export function PopupApp(): JSX.Element {
 
   return (
     <div className="popup">
-      <header>
-        <h2>Itera Pipeline</h2>
-        <p className="muted">
-          {isLoading
-            ? "Loading settings…"
-            : activeModels.length > 0
-            ? `${activeModels.length} model${activeModels.length === 1 ? "" : "s"} ready`
-            : "Enable models from the options page to begin"}
-        </p>
+      <header className="popup-header">
+        <img src="/imgs/logo.png" alt="IterAI logo" className="logo-mark" />
+        <div>
+          <h2>IterAI Pipeline</h2>
+          <p className="muted">
+            {isLoading
+              ? "Loading settings…"
+              : activeModels.length > 0
+              ? `${activeModels.length} model${activeModels.length === 1 ? "" : "s"} ready`
+              : "Enable models from the options page to begin"}
+          </p>
+        </div>
       </header>
 
       <section className="form-field">
-        <label htmlFor="itera-prompt">Prompt</label>
+        <label htmlFor="iterai-prompt" className="label-with-info">
+          Prompt
+          <InfoTooltip
+            text="Describe what you want IterAI to accomplish. We'll send this to the configured models."
+            ariaLabel="What is a prompt?"
+            offsetX={150}
+          />
+        </label>
         <textarea
-          id="itera-prompt"
+          id="iterai-prompt"
           rows={4}
           value={prompt}
           placeholder="Read prompt from ChatGPT or paste manually"
@@ -162,9 +181,15 @@ export function PopupApp(): JSX.Element {
       </section>
 
       <section className="form-field">
-        <label htmlFor="itera-system-prompt">System prompt</label>
+        <label htmlFor="iterai-system-prompt" className="label-with-info">
+          System prompt
+          <InfoTooltip
+            text="Context that guides every model run. Use it to define tone, constraints, or rules."
+            ariaLabel="What is a system prompt?"
+          />
+        </label>
         <textarea
-          id="itera-system-prompt"
+          id="iterai-system-prompt"
           rows={3}
           value={systemPrompt}
           onChange={(event) => setSystemPrompt(event.target.value)}
@@ -184,7 +209,7 @@ export function PopupApp(): JSX.Element {
             {results.map((node, index) => (
               <li key={node.id}>
                 <span className="index">{index + 1}</span>
-                <div>
+                <div className="result-body">
                   <p className="model-title">{node.model}</p>
                   <p className="model-subtitle">
                     {node.metadata?.provider
@@ -194,16 +219,36 @@ export function PopupApp(): JSX.Element {
                   </p>
                   <p className="muted output-preview">
                     {node.output
-                      ? `${node.output.slice(0, 90)}${
-                          node.output.length > 90 ? "…" : ""
-                        }`
+                      ? expandedNodes.includes(node.id)
+                        ? node.output
+                        : `${node.output.slice(0, 75)}${
+                            node.output.length > 75 ? "…" : ""
+                          }`
                       : "No output"}
                   </p>
+                  {node.output && node.output.length > 75 && (
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => toggleExpanded(node.id)}
+                    >
+                      {expandedNodes.includes(node.id) ? "Show less" : "Show more"}
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
           </ol>
         </section>
+      )}
+
+      {isRunning && (
+        <div className="progress" role="status" aria-live="polite">
+          <div className="progress__track" aria-hidden="true">
+            <div className="progress__bar" />
+          </div>
+          <span className="progress__label">Running pipeline…</span>
+        </div>
       )}
 
       <div className="button-row">

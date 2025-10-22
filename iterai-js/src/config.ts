@@ -71,7 +71,7 @@ export const DEFAULT_MODEL_REGISTRY: Record<string, ModelRegistryEntry> = {
       maxOutputTokens: 2048,
     },
   },
-  "gemini-1.5-pro": {
+  "gemini-1.5-pro-latest": {
     provider: "google",
     label: "Google Gemini 1.5 Pro",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/models",

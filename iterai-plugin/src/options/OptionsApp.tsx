@@ -21,6 +21,7 @@ import {
   saveSettings,
 } from "../shared/storage";
 import { SortableModel } from "./SortableModel";
+import { InfoTooltip } from "../shared/InfoTooltip";
 import "./styles.css";
 
 export function OptionsApp(): JSX.Element {
@@ -43,7 +44,6 @@ export function OptionsApp(): JSX.Element {
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         .map((model, index) => ({ ...model, order: index }));
       setModels(ordered);
-      setActiveModels(ordered.filter((model) => model.enabled).map((model) => model.label));
       setSystemPrompt(settings.defaultSystemPrompt);
       const secretValues = await loadSecrets(ordered.map((model) => model.provider));
       setSecrets(secretValues);
@@ -62,7 +62,6 @@ export function OptionsApp(): JSX.Element {
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         .map((model, index) => ({ ...model, order: index }));
       setModels(ordered);
-      setActiveModels(ordered.filter((model) => model.enabled).map((model) => model.label));
       setSystemPrompt(next.defaultSystemPrompt);
     });
 
@@ -78,9 +77,6 @@ export function OptionsApp(): JSX.Element {
         order: index,
       }));
       setModels(normalized);
-      setActiveModels(
-        normalized.filter((model) => model.enabled).map((model) => model.label),
-      );
       await saveSettings({
         models: normalized,
         defaultSystemPrompt: prompt ?? systemPrompt,
@@ -150,7 +146,7 @@ export function OptionsApp(): JSX.Element {
   if (isLoading) {
     return (
       <main className="page">
-        <p className="muted">Loading Itera settings…</p>
+        <p className="muted">Loading IterAI settings…</p>
       </main>
     );
   }
@@ -159,14 +155,28 @@ export function OptionsApp(): JSX.Element {
     <main className="page">
       <section className="panel">
         <header className="panel-header">
-          <h1>Model Pipeline</h1>
-          <p className="muted">
-            Toggle providers and drag the rows to define Itera's refinement order.
-          </p>
+          <div className="panel-header__brand">
+            <img src="/imgs/logo.png" alt="IterAI logo" className="logo-mark" />
+            <div>
+              <h1>IterAI Model Pipeline</h1>
+              <p className="muted">
+                Toggle providers and drag the rows to define IterAI's refinement order.
+              </p>
+            </div>
+          </div>
         </header>
 
         <div className="form-field">
-          <label htmlFor="prompt">Default system prompt</label>
+          <label htmlFor="prompt" className="label-with-info">
+            Default system prompt
+            <InfoTooltip
+              text="Seed instructions shared with every model run unless you override them in the popup."
+              ariaLabel="What is the default system prompt?"
+            />
+          </label>
+          <p className="field-description">
+            Use this to set tone, constraints, or style guidance that applies to every workflow.
+          </p>
           <textarea
             id="prompt"
             value={systemPrompt}

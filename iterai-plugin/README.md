@@ -1,4 +1,6 @@
-# Itera Plugin
+![IterAI logo](public/img/logo-with-text.png)
+
+# IterAI Plugin
 
 Chromium extension that configures IterAI model pipelines and connects browser prompts to the local refinement DAG.
 

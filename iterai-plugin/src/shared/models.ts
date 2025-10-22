@@ -1,8 +1,4 @@
-export type ModelProvider =
-  | "openai"
-  | "anthropic"
-  | "google"
-  | "custom";
+export type ModelProvider = "openai" | "anthropic" | "google" | "custom";
 
 export interface ModelConfig {
   id: string;
@@ -57,10 +53,10 @@ export const DEFAULT_MODELS: ModelConfig[] = [
     maxOutputTokens: 2048,
   },
   {
-    id: "google:gemini-1.5-pro",
+    id: "google:gemini-1.5-pro-latest",
     provider: "google",
     label: "Gemini 1.5 Pro",
-    model: "gemini-1.5-pro",
+    model: "gemini-1.5-pro-latest",
     enabled: false,
     order: 3,
     requiresApiKey: true,

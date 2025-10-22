@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 
 from litellm import acompletion
 
@@ -9,10 +9,17 @@ from .types import Step
 logger = logging.getLogger(__name__)
 
 
-def _resolve_model_entry(model: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+MODEL_ALIASES: Dict[str, str] = {
+    "gemini-1.5-pro": "gemini-1.5-pro-latest",
+}
+
+
+def _resolve_model_entry(model: str) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
     config = get_config()
     registry = config.get("models.registry", {}) or {}
-    entry = registry.get(model, {}) or {}
+    entry = registry.get(model)
+    if entry is None:
+        return None, {}
     options = entry.get("options", {}) or {}
     return entry, options
 
@@ -51,8 +58,12 @@ def _apply_generation_options(entry: Dict[str, Any], options: Dict[str, Any]) ->
 
 
 async def generate_output(model: str, user_prompt: str, system_prompt: str = ""):
+    normalized_model = MODEL_ALIASES.get(model, model)
     entry, options = _resolve_model_entry(model)
-    completion_kwargs = _apply_generation_options(entry, options)
+    if entry is None and normalized_model != model:
+        entry, options = _resolve_model_entry(normalized_model)
+
+    completion_kwargs = _apply_generation_options(entry or {}, options)
 
     messages = []
     if system_prompt:
@@ -65,7 +76,12 @@ async def generate_output(model: str, user_prompt: str, system_prompt: str = "")
         len(user_prompt),
         completion_kwargs,
     )
-    response = await acompletion(model=model, messages=messages, **completion_kwargs)
+    target_model = normalized_model if normalized_model != model else model
+    response = await acompletion(
+        model=target_model,
+        messages=messages,
+        **completion_kwargs,
+    )
     content = response["choices"][0]["message"]["content"]
     logger.debug("LLM response received: %s chars", len(content))
     return content

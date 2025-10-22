@@ -36,6 +36,10 @@ function normalizeBase(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
+const MODEL_ALIASES: Record<string, string> = {
+  "gemini-1.5-pro": "gemini-1.5-pro-latest",
+};
+
 function defaultBaseUrl(provider: ModelProvider): string {
   const config = getConfig();
   switch (provider) {
@@ -55,7 +59,10 @@ function defaultBaseUrl(provider: ModelProvider): string {
   }
 }
 
-function lookupApiKey(provider: ModelProvider, entry?: ModelRegistryEntry): string | undefined {
+function lookupApiKey(
+  provider: ModelProvider,
+  entry?: ModelRegistryEntry,
+): string | undefined {
   if (entry?.apiKey) return entry.apiKey;
   const config = getConfig();
   switch (provider) {
@@ -72,27 +79,34 @@ function lookupApiKey(provider: ModelProvider, entry?: ModelRegistryEntry): stri
 
 function resolveRequest(options: LLMRequestOptions): ResolvedRequest {
   const config = getConfig();
-  const registry = config.get("models.registry", {}) as Record<string, ModelRegistryEntry>;
-  const entry = registry?.[options.model];
+  const registry = config.get("models.registry", {}) as Record<
+    string,
+    ModelRegistryEntry
+  >;
+  const normalizedModel = MODEL_ALIASES[options.model] ?? options.model;
+  const entry = registry?.[options.model] ?? registry?.[normalizedModel];
+  const modelId = entry ? normalizedModel : options.model;
   const provider: ModelProvider =
     options.provider || entry?.provider || "openai";
 
   const entryOptions = (entry?.options ?? {}) as Record<string, any>;
 
-  const baseUrl =
-    options.baseUrl || entry?.baseUrl || defaultBaseUrl(provider);
+  const baseUrl = options.baseUrl || entry?.baseUrl || defaultBaseUrl(provider);
 
-  const apiKey = options.apiKey || entry?.apiKey || lookupApiKey(provider, entry);
+  const apiKey =
+    options.apiKey || entry?.apiKey || lookupApiKey(provider, entry);
 
   const temperature = options.temperature ?? entryOptions.temperature;
   const topP = options.topP ?? entryOptions.topP;
   const topK = options.topK ?? entryOptions.topK;
   const maxTokens = options.maxTokens ?? entryOptions.maxTokens;
   const maxOutputTokens =
-    options.maxOutputTokens ?? entryOptions.maxOutputTokens ?? entryOptions.maxTokens;
+    options.maxOutputTokens ??
+    entryOptions.maxOutputTokens ??
+    entryOptions.maxTokens;
 
   return {
-    model: options.model,
+    model: modelId,
     provider,
     baseUrl,
     apiKey,
@@ -133,8 +147,8 @@ async function callOpenAI(
     typeof request.maxTokens === "number"
       ? Math.floor(request.maxTokens)
       : typeof request.maxOutputTokens === "number"
-      ? Math.floor(request.maxOutputTokens)
-      : undefined;
+        ? Math.floor(request.maxOutputTokens)
+        : undefined;
   if (typeof maxTokens === "number" && maxTokens > 0) {
     body.max_tokens = maxTokens;
   }
@@ -203,18 +217,15 @@ async function callAnthropic(
     payload.top_k = request.topK;
   }
 
-  const response = await fetch(
-    `${normalizeBase(request.baseUrl)}/messages`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": request.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(payload),
+  const response = await fetch(`${normalizeBase(request.baseUrl)}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": request.apiKey,
+      "anthropic-version": "2023-06-01",
     },
-  );
+    body: JSON.stringify(payload),
+  });
 
   if (!response.ok) {
     throw new Error(
@@ -266,7 +277,10 @@ async function callGoogle(
     generationConfig.topK = request.topK;
   }
   if (typeof request.maxOutputTokens === "number") {
-    generationConfig.maxOutputTokens = Math.max(1, Math.floor(request.maxOutputTokens));
+    generationConfig.maxOutputTokens = Math.max(
+      1,
+      Math.floor(request.maxOutputTokens),
+    );
   }
   if (Object.keys(generationConfig).length > 0) {
     payload.generationConfig = generationConfig;

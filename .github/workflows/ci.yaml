@@ -1,15 +1,15 @@
-
 name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
 
 jobs:
-  test:
+  IteraiPy:
     runs-on: ubuntu-latest
+    environment: ci
 
     steps:
       - name: Checkout code
@@ -31,15 +31,54 @@ jobs:
         id: cached-poetry-dependencies
         uses: actions/cache@v3
         with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          path: iterai-py/.venv
+          key: venv-${{ runner.os }}-${{ hashFiles('iterai-py/poetry.lock') }}
 
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        working-directory: iterai-py
         run: poetry install --no-interaction --no-root
 
       - name: Install project
+        working-directory: iterai-py
         run: poetry install --no-interaction
 
       - name: Run tests
+        working-directory: iterai-py
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: poetry run pytest
+
+  IteraiJS:
+    runs-on: ubuntu-latest
+    environment: ci
+    defaults:
+      run:
+        working-directory: iterai-js
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: iterai-js/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check format
+        run: npx prettier --check "src/**/*.ts"
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test

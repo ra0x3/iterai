@@ -1,6 +1,11 @@
 import { DAG } from "./dag.js";
 import { Node } from "./node.js";
-import { getConfig, Config, ModelProvider, ModelRegistryEntry } from "./config.js";
+import {
+  getConfig,
+  Config,
+  ModelProvider,
+  ModelRegistryEntry,
+} from "./config.js";
 import { generateOutput } from "./llm.js";
 import { ImprovementType } from "./types.js";
 
@@ -17,14 +22,18 @@ export class IterAI {
     baseUrl?: string;
     provider: ModelProvider;
   } {
-    const registry = this.config.get("models.registry", {} as Record<string, ModelRegistryEntry>);
+    const registry = this.config.get(
+      "models.registry",
+      {} as Record<string, ModelRegistryEntry>,
+    );
     const entry = model ? registry?.[model] : undefined;
     const provider =
       (entry?.provider as ModelProvider | undefined) ||
       ("openai" as ModelProvider);
 
     const baseUrl = entry?.baseUrl;
-    const apiKey = entry?.apiKey ?? (provider === "openai" ? this.apiKey : undefined);
+    const apiKey =
+      entry?.apiKey ?? (provider === "openai" ? this.apiKey : undefined);
 
     if (provider === "openai") {
       return {

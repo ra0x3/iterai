@@ -1,11 +1,10 @@
-import {
-  DEFAULT_CONFIG,
-  Config,
-  IterAI,
-  setGlobalConfig,
-} from "@itera/index";
+import { DEFAULT_CONFIG, Config, IterAI, setGlobalConfig } from "@itera/index";
 import { ModelConfig, PluginSettings } from "../shared/models";
-import { loadSecrets, loadSettings, onSettingsChanged } from "../shared/storage";
+import {
+  loadSecrets,
+  loadSettings,
+  onSettingsChanged,
+} from "../shared/storage";
 
 let iteraiInstance: IterAI | null = null;
 let currentSettings: PluginSettings | null = null;
@@ -39,7 +38,7 @@ function buildRegistry(models: ModelConfig[]): Record<string, any> {
 
 function ensureItera(): IterAI {
   if (!iteraiInstance) {
-    throw new Error("Itera is not initialised yet");
+    throw new Error("IterAI is not initialised yet");
   }
   return iteraiInstance;
 }
@@ -53,7 +52,12 @@ async function configureItera(settings: PluginSettings): Promise<void> {
   const uniqueProviders = Array.from(
     new Set(settings.models.map((model) => model.provider)),
   );
-  const secrets = await loadSecrets(uniqueProviders);
+  const storedSecrets = settings.secrets ?? {};
+  const loadedSecrets = await loadSecrets(uniqueProviders);
+  const secrets = { ...storedSecrets, ...loadedSecrets } as Record<
+    string,
+    string
+  >;
 
   const registry = buildRegistry(settings.models);
 
@@ -67,13 +71,16 @@ async function configureItera(settings: PluginSettings): Promise<void> {
     },
   });
 
-  config.set("pipeline.providers", enabledModelOrder.map((model) => ({
-    id: model.id,
-    model: model.model,
-    label: model.label,
-    provider: model.provider,
-    order: model.order,
-  })));
+  config.set(
+    "pipeline.providers",
+    enabledModelOrder.map((model) => ({
+      id: model.id,
+      model: model.model,
+      label: model.label,
+      provider: model.provider,
+      order: model.order,
+    })),
+  );
   config.set("models.registry", registry);
   if (secrets.openai) {
     config.set("api.openai_key", secrets.openai);
@@ -87,7 +94,8 @@ async function configureItera(settings: PluginSettings): Promise<void> {
 
   setGlobalConfig(config);
 
-  const primaryKey = secrets.openai || secrets.anthropic || secrets.google || "";
+  const primaryKey =
+    secrets.openai || secrets.anthropic || secrets.google || "";
   const baseUrl = config.get("api.base_url", "https://api.openai.com/v1");
   iteraiInstance = new IterAI("plugin-storage", primaryKey, baseUrl);
 }
@@ -133,7 +141,12 @@ async function runPipeline(
       if (!previousNode) {
         throw new Error("Previous node missing for refinement");
       }
-      const node = await iterai.refine(previousNode, model.model, prompt, sysPrompt);
+      const node = await iterai.refine(
+        previousNode,
+        model.model,
+        prompt,
+        sysPrompt,
+      );
       nodes.push(node.toDict());
       previousNode = node;
     }
@@ -151,7 +164,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true, data: payload });
   };
   const fail = (error: unknown) => {
-    console.error("Itera background error", error);
+    console.error("IterAI background error", error);
     sendResponse({
       ok: false,
       error: error instanceof Error ? error.message : String(error),
